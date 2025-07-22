@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker Runtime Files
+docker/managed_containers.json
+docker/managed_images.json
+docker/session_script_*.py
+docker/Dockerfile.cancelled
+docker/Dockerfile.msc-*
+
+# Test Files (keeping core test files, excluding temporary ones)
+test1.py
+test2.py
+test3.py
+test_clean.py
+test_fixes.py
+test_gui_calc.py
+test_minimal.py
+quick_test_docker.py
+demo_file_selector.py
+unknown_file.py
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Documentation artifacts
+*.pdf
+*.doc
+*.docx
+
+# Backup files
+*_backup.py
+*_old.py
+execution_backup.py
+prompts_old.py

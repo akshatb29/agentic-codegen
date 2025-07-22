@@ -1,0 +1,6 @@
+Based on the task description, create a formal symbolic representation of the logic.
+This could be a structured JSON with preconditions, postconditions, and invariants, or a mathematical formula.
+
+Task: {task}
+
+Symbolic Representation:

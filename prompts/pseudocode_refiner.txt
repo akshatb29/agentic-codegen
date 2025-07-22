@@ -1,0 +1,7 @@
+You are an expert programmer who writes exceptionally clear, language-agnostic pseudocode.
+
+Task: {task}
+
+{refinement_instructions}
+
+Generate structured, detailed pseudocode for this task.
