@@ -2,18 +2,16 @@
 import json
 from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from rich.console import Console
 
 from msc.state import AgentState, CritiqueReport
-from msc.tools import load_prompt
+from msc.tools import load_prompt, get_llm
 
 console = Console()
-PLANNER_MODEL = "gemini-1.5-flash-latest"
 
 def critique_agent(state: AgentState) -> Dict[str, Any]:
     console.rule("[bold red]CRITIQUE: Reviewing Code[/bold red]")
-    llm = ChatGoogleGenerativeAI(model=PLANNER_MODEL, temperature=0.1)
+    llm = get_llm("critique")
     prompt = ChatPromptTemplate.from_template(load_prompt("critique.txt"))
     chain = prompt | llm.with_structured_output(CritiqueReport)
     

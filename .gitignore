@@ -72,6 +72,8 @@ test_minimal.py
 quick_test_docker.py
 demo_file_selector.py
 unknown_file.py
+**/test_*.*
+
 
 # Logs
 *.log

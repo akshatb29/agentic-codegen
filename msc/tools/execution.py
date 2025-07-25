@@ -11,8 +11,9 @@ import docker
 from docker.errors import DockerException, BuildError, ContainerError
 
 from .filesystem import FilesystemTool
-from .agentic_docker import docker_manager
 from .user_interaction import user_confirmation_tool, user_feedback_tool
+# Use compatibility wrapper for now to avoid breaking existing functionality
+from .agentic_docker import docker_manager
 
 console = Console()
 DOCKER_DIR = Path(__file__).parent.parent.parent / "docker"
@@ -32,6 +33,104 @@ def _run_local(file_path: str) -> Dict[str, Any]:
         return {"success": False, "stdout": "", "stderr": f"TimeoutError: Execution timed out after {timeout}s."}
     except Exception as e:
         return {"success": False, "stdout": "", "stderr": str(e)}
+
+
+def _run_docker_enhanced(code: str, user_request: str = "", target_file: str = "main.py", project_name: str = None) -> Dict[str, Any]:
+    """Enhanced Docker execution with container reuse and project-based naming"""
+    console.log(f"🐳 [Docker] Enhanced execution for project: {project_name or 'untitled'}")
+    
+    try:
+        client = docker.from_env()
+        client.ping()
+    except DockerException:
+        return {"success": False, "stdout": "", "stderr": "Docker daemon is not running. Please start Docker."}
+
+    # Setup signal handler for graceful shutdown
+    docker_manager.setup_signal_handler()
+
+    # Check for existing containers and offer reuse options
+    existing_containers = docker_manager.check_existing_containers()
+    selected_container = None
+    
+    if existing_containers:
+        print(f"\n💡 Found {len(existing_containers)} existing development containers")
+        for i, container in enumerate(existing_containers):
+            status_emoji = "🟢" if container["status"] == "running" else "🔴"
+            created_time = container.get('created', 'Unknown')[:19].replace('T', ' ')
+            print(f"  {i+1}. {status_emoji} {container['name']} ({container['image']}) - {container['status']}")
+        
+        choice = user_feedback_tool(
+            f"Reuse existing container? (1-{len(existing_containers)}, 'n' for new): ", 
+            allow_empty=True
+        ).strip()
+        
+        if choice.isdigit() and 1 <= int(choice) <= len(existing_containers):
+            selected = existing_containers[int(choice) - 1]
+            selected_container = selected["name"]
+            print(f"♻️ Using existing container: {selected_container}")
+            
+            # Update container start point for the new target file
+            try:
+                # We'll use the existing container's image but update the start point
+                container_obj = client.containers.get(selected["id"])
+                if container_obj.status == "exited":
+                    container_obj.restart()
+                
+                # Execute in the existing container with updated entry point
+                result = docker_manager.execute_in_container_with_entrypoint(
+                    selected_container, code, target_file
+                )
+                return result
+                
+            except Exception as e:
+                print(f"⚠️ Failed to reuse container: {e}")
+                selected_container = None
+
+    # If no container selected or reuse failed, create new project-based container
+    if not selected_container:
+        # Use agentic system to suggest and prepare a minimal Docker image
+        try:
+            spec = docker_manager.analyze_task_and_suggest_image(code, user_request)
+            image_name = docker_manager.get_or_create_image(spec)
+            if not image_name:
+                return {"success": False, "stdout": "", "stderr": "Failed to prepare Docker environment"}
+        except Exception as e:
+            console.log(f"⚠️ Agentic image creation failed: {e}")
+            return {"success": False, "stdout": "", "stderr": str(e)}
+        
+        # Create project-based container
+        try:
+            container_name = docker_manager.create_project_container(
+                image_name, code, target_file, project_name or "untitled-project"
+            )
+            if not container_name:
+                console.log("⚠️ Container creation failed, falling back to one-time execution")
+                return _run_docker_oneshot(image_name, code)
+            
+            # Execute in the new container
+            result = docker_manager.execute_in_container_with_entrypoint(
+                container_name, code, target_file
+            )
+            
+            if not result["success"]:
+                console.log("❌ [Docker] Container execution failed.")
+                console.log(f"🔍 Exit code: {result.get('exit_code', 'unknown')}")
+                console.log(f"💾 Container '{container_name}' preserved for debugging")
+                console.log(f"📄 Target file: {target_file}")
+                console.log("💡 Container ready for correction flow - packages can be installed dynamically")
+                
+                # Add container info for correction flow
+                result["container_available"] = True
+                result["container_supports_pip_install"] = True
+            else:
+                console.log("✅ [Docker] Code executed successfully in container.")
+            
+            return result
+
+        except Exception as e:
+            console.log(f"❌ [Docker] Container management failed: {e}")
+            # Fallback to one-time execution
+            return _run_docker_oneshot(image_name, code)
 
 
 def _run_docker(code: str, user_request: str = "", custom_image_name: str = None) -> Dict[str, Any]:
@@ -139,7 +238,7 @@ def _run_docker_oneshot(image_name: str, code: str) -> Dict[str, Any]:
             os.remove(script_path_in_host)
 
 
-def run_code(code: str, file_path: str, mode: str, user_request: str = "") -> Dict[str, Any]:
+def run_code(code: str, file_path: str, mode: str, user_request: str = "", project_name: str = None) -> Dict[str, Any]:
     """Top-level function to select execution mode with improved Docker workflow."""
     if not file_path.endswith(".py"):
         return {"success": True, "stdout": "Non-executable file type.", "stderr": ""}
@@ -147,16 +246,108 @@ def run_code(code: str, file_path: str, mode: str, user_request: str = "") -> Di
     FilesystemTool.write_file(file_path, code)
     
     if mode == 'docker':
-        # No prompts during execution - just run
-        docker_result = _run_docker(code, user_request)
-        
-        if not docker_result["success"] and "Docker daemon" in docker_result["stderr"]:
-            print("⚠️ [Fallback] Docker failed, switching to local execution...")
-            return _run_local(file_path)
-        
-        return docker_result
+        # Enhanced Docker workflow with container options
+        return _run_docker_enhanced(code, user_request, file_path, project_name)
     else: # 'local'
         return _run_local(file_path)
+
+
+def _run_docker_enhanced(code: str, user_request: str = "", target_file: str = "main.py", project_name: str = None) -> Dict[str, Any]:
+    """Enhanced Docker execution with container reuse and project-based naming"""
+    console.log(f"🐳 [Docker] Enhanced execution for project: {project_name or 'untitled'}")
+    
+    try:
+        client = docker.from_env()
+        client.ping()
+    except DockerException:
+        return {"success": False, "stdout": "", "stderr": "Docker daemon is not running. Please start Docker."}
+
+    # Setup signal handler for graceful shutdown
+    docker_manager.setup_signal_handler()
+
+    # Check for existing containers and offer reuse options
+    existing_containers = docker_manager.check_existing_containers()
+    selected_container = None
+    
+    if existing_containers:
+        print(f"\n💡 Found {len(existing_containers)} existing development containers")
+        for i, container in enumerate(existing_containers):
+            status_emoji = "🟢" if container["status"] == "running" else "🔴"
+            created_time = container.get('created', 'Unknown')[:19].replace('T', ' ')
+            print(f"  {i+1}. {status_emoji} {container['name']} ({container['image']}) - {container['status']}")
+        
+        choice = user_feedback_tool(
+            f"Reuse existing container? (1-{len(existing_containers)}, 'n' for new): ", 
+            allow_empty=True
+        ).strip()
+        
+        if choice.isdigit() and 1 <= int(choice) <= len(existing_containers):
+            selected = existing_containers[int(choice) - 1]
+            selected_container = selected["name"]
+            print(f"♻️ Using existing container: {selected_container}")
+            
+            # Update container start point for the new target file
+            try:
+                # We'll use the existing container's image but update the start point
+                container_obj = client.containers.get(selected["id"])
+                if container_obj.status == "exited":
+                    container_obj.restart()
+                
+                # Execute in the existing container with updated entry point
+                result = docker_manager.execute_in_container_with_entrypoint(
+                    selected_container, code, target_file
+                )
+                return result
+                
+            except Exception as e:
+                print(f"⚠️ Failed to reuse container: {e}")
+                selected_container = None
+
+    # If no container selected or reuse failed, create new project-based container
+    if not selected_container:
+        # Use agentic system to suggest and prepare a minimal Docker image
+        try:
+            spec = docker_manager.analyze_task_and_suggest_image(code, user_request)
+            image_name = docker_manager.get_or_create_image(spec)
+            if not image_name:
+                return {"success": False, "stdout": "", "stderr": "Failed to prepare Docker environment"}
+        except Exception as e:
+            console.log(f"⚠️ Agentic image creation failed: {e}")
+            return {"success": False, "stdout": "", "stderr": str(e)}
+        
+        # Create project-based container
+        try:
+            container_name = docker_manager.create_project_container(
+                image_name, code, target_file, project_name or "untitled-project"
+            )
+            if not container_name:
+                console.log("⚠️ Container creation failed, falling back to one-time execution")
+                return _run_docker_oneshot(image_name, code)
+            
+            # Execute in the new container
+            result = docker_manager.execute_in_container_with_entrypoint(
+                container_name, code, target_file
+            )
+            
+            if not result["success"]:
+                console.log("❌ [Docker] Container execution failed.")
+                console.log(f"🔍 Exit code: {result.get('exit_code', 'unknown')}")
+                console.log(f"💾 Container '{container_name}' preserved for debugging")
+                console.log(f"📄 Target file: {target_file}")
+                console.log("💡 Container ready for correction flow - packages can be installed dynamically")
+                
+                # Add container info for correction flow
+                result["container_available"] = True
+                result["container_supports_pip_install"] = True
+            else:
+                console.log("✅ [Docker] Code executed successfully in container.")
+            
+            return result
+
+        except Exception as e:
+            console.log(f"❌ [Docker] Container management failed: {e}")
+            # Fallback to one-time execution
+            return _run_docker_oneshot(image_name, code)
 
 
 # To test this file independently: python -m msc.tools.execution

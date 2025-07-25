@@ -1,18 +1,16 @@
 # msc/agents/reasoner.py
 from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from rich.console import Console
 
 from msc.state import AgentState
-from msc.tools import load_prompt
+from msc.tools import load_prompt, get_llm
 
 console = Console()
-GENERATOR_MODEL = "gemini-1.5-flash-latest"
 
 def symbolic_reasoner_agent(state: AgentState) -> Dict[str, Any]:
     console.rule("[bold blue]REASONER: Symbolic Representation[/bold blue]")
-    llm = ChatGoogleGenerativeAI(model=GENERATOR_MODEL, temperature=0.1)
+    llm = get_llm("reasoner")
     prompt = ChatPromptTemplate.from_template(load_prompt("symbolic_reasoner.txt"))
     chain = prompt | llm
     representation = chain.invoke({"task": state["current_task_description"]})
@@ -20,7 +18,7 @@ def symbolic_reasoner_agent(state: AgentState) -> Dict[str, Any]:
     
 def pseudocode_refiner_agent(state: AgentState) -> Dict[str, Any]:
     console.rule("[bold blue]REASONER: Pseudocode Refinement[/bold blue]")
-    llm = ChatGoogleGenerativeAI(model=GENERATOR_MODEL, temperature=0.2)
+    llm = get_llm("reasoner", temperature=0.2)  # Override temperature for this specific use
     iterations_remaining = state.get("pseudocode_iterations_remaining", 2)
     console.log(f"Pseudocode Iteration: {3 - iterations_remaining}/2")
     

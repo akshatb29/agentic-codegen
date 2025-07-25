@@ -2,18 +2,16 @@
 import json
 from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from rich.console import Console
 
 from msc.state import AgentState
-from msc.tools import load_prompt
+from msc.tools import load_prompt, get_llm
 
 console = Console()
-GENERATOR_MODEL = "gemini-1.5-flash-latest"
 
 def _generate(state: AgentState, context_key: str, context_value: Any) -> Dict[str, Any]:
     console.rule(f"[bold green]GENERATOR: {context_key} -> Code[/bold green]")
-    llm = ChatGoogleGenerativeAI(model=GENERATOR_MODEL, temperature=0.2)
+    llm = get_llm("code_generator")
     prompt = ChatPromptTemplate.from_template(load_prompt("code_generator.txt"))
     chain = prompt | llm
     

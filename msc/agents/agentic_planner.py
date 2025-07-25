@@ -5,13 +5,12 @@ More Agentic Planner: Agents make autonomous decisions and communicate with each
 import json
 from typing import Dict, Any, List, Optional
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from dataclasses import dataclass
 from enum import Enum
 import uuid
 
 from msc.state import AgentState, SoftwareDesign, GenerationStrategy, BrainstormedDesigns, EvaluatedDesigns
-from msc.tools import user_confirmation_tool, FilesystemTool, load_prompt
+from msc.tools import user_confirmation_tool, FilesystemTool, load_prompt, get_llm
 
 class AgentDecision(Enum):
     APPROVE = "approve"
@@ -84,7 +83,7 @@ class AgenticPlanner(AutonomousAgent):
     def llm(self):
         """Lazy initialization of LLM"""
         if self._llm is None:
-            self._llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.3)
+            self._llm = get_llm("planner", temperature=0.3)
         return self._llm
     
     def autonomous_design_decision(self, designs: List[SoftwareDesign], user_request: str) -> dict:

@@ -16,6 +16,24 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     thoughts_history: Annotated[List[Dict[str, Any]], operator.add]
     existing_file_context: Dict[str, str]
+    
+    # Tech stack and project structure
+    tech_stack_approved: Optional[bool]
+    tech_analysis: Optional[str]
+    detected_app_type: Optional[str]
+    docker_prep_started: Optional[bool]
+    prepared_docker_spec: Optional[Dict[str, Any]]
+    
+    # Project structure planning
+    project_structure_approved: Optional[bool]
+    project_structure: Optional[str]
+    project_name: Optional[str]
+    main_file: Optional[str]
+    requirements: Optional[List[str]]
+    user_feedback_for_tech_replan: Optional[str]
+    user_feedback_for_structure_replan: Optional[str]
+    
+    # Software design
     software_design: Optional[Dict[str, Any]]
     file_plan_iterator: Optional[List[Dict[str, Any]]]
     current_file_info: Optional[Dict[str, Any]]
@@ -30,6 +48,8 @@ class AgentState(TypedDict):
     user_command: Optional[str]
     user_feedback_for_replan: Optional[str]
     user_feedback_for_rethink: Optional[str]
+    
+    # Generation and testing
     generated_pseudocode: Optional[str]
     generated_symbolic_representation: Optional[str]
     generated_code: Optional[str]
@@ -39,6 +59,14 @@ class AgentState(TypedDict):
     critique_feedback_details: Optional[Dict[str, Any]]
     corrected_code: Optional[str]
     correction_attempts: int
+    
+    # New testing phase fields
+    files_completed: Optional[bool]
+    ready_for_testing: Optional[bool]
+    individual_tests_passed: Optional[List[str]]
+    individual_tests_failed: Optional[List[str]]
+    full_app_test_result: Optional[Dict[str, Any]]
+    container_name: Optional[str]
 
 class SoftwareDesign(BaseModel):
     thought: str = Field(description="A brief thought process on how this design was chosen.")

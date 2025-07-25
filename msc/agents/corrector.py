@@ -2,18 +2,16 @@
 import json
 from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from rich.console import Console
 
 from msc.state import AgentState
-from msc.tools import load_prompt
+from msc.tools import load_prompt, get_llm
 
 console = Console()
-GENERATOR_MODEL = "gemini-1.5-flash-latest"
 
 def corrector_agent(state: AgentState) -> Dict[str, Any]:
     console.rule("[bold orange_red1]CORRECTOR: Patching Code[/bold orange_red1]")
-    llm = ChatGoogleGenerativeAI(model=GENERATOR_MODEL, temperature=0.1)
+    llm = get_llm("corrector")
     prompt = ChatPromptTemplate.from_template(load_prompt("corrector.txt"))
     chain = prompt | llm
     

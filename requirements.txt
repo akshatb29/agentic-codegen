@@ -2,7 +2,9 @@ langchain
 langgraph
 langchain_core
 langchain_google_genai
+langchain_community
 rich
 pydantic
 docker
 inquirer
+pyyaml

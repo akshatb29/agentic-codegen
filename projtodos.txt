@@ -1,0 +1,14 @@
+make the planner ask about all the design options tech stakc etc decisions should be planned suggested and then the options should be presented to the user also  i want to implement a Master the Iterative User Feedback Loop (REPLAN/RETHINK with Instructions):
+
+Action: This is your MOST UNIQUE AND POWERFUL FEATURE right now. Go deep.
+
+Enhanced Input Parsing: Develop a robust parsing mechanism for REPLAN <instructions> and RETHINK <instructions>. Use an LLM or a smart regex to extract the specific instructions from the user's command.
+
+Contextual Feedback Integration: Ensure the PlannerAgent's prompt, when re-planning/rethinking, very effectively incorporates user_feedback_for_replan or user_feedback_for_rethink as a direct, high-priority constraint or additional information.
+
+Visual Diffing: When the CorrectorAgent generates a fix or a CodeGenAgent generates a new version of an existing file, present a git diff-like output in the CLI. This allows users to see the proposed changes before approving. (Use a library like difflib).
+
+"Why Not?" Explanations: If the Planner receives a RETHINK for a strategy it's confident about, it could generate a brief explanation to the user about why it chose that path, or why the user's suggested change might not work. This educates the user.
+
+
+make singele llm config and use it everywhere

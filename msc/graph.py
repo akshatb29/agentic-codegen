@@ -4,7 +4,7 @@ from msc.state import AgentState
 from msc.agents import (
     planner_agent, agentic_planner_agent, symbolic_reasoner_agent, pseudocode_refiner_agent,
     nl_to_code_agent, pseudocode_to_code_agent, symbolic_to_code_agent,
-    verifier_agent, critique_agent, corrector_agent
+    verifier_agent, critique_agent, corrector_agent, docker_workflow_agent
 )
 
 def should_continue(state: AgentState) -> str:
@@ -20,10 +20,22 @@ def route_strategy(state: AgentState) -> str:
 
 def check_verification(state: AgentState) -> str:
     if state["verifier_report"]["success"] and state["critique_feedback_details"]["is_correct_and_runnable"]:
+        # If Docker execution is enabled, route to docker_agent for containerized testing
+        if state.get("use_docker_execution", False):
+            return "docker_agent"
         return "finish_file"
     if state.get("correction_attempts", 0) >= 2:
         return "finish_file"
     return "corrector"
+
+def route_from_docker(state: AgentState) -> str:
+    """Route from docker_agent based on execution results"""
+    docker_results = state.get("docker_execution_results", {})
+    if docker_results.get("success", False):
+        return "finish_file"
+    else:
+        # If Docker execution failed, route back to corrector for fixes
+        return "corrector"
 
 def finish_file(state: AgentState) -> dict:
     print(f"✅ SUCCESS: Finished processing {state['current_file_name']}")
@@ -44,6 +56,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("verifier", verifier_agent)
     workflow.add_node("critique", critique_agent)
     workflow.add_node("corrector", corrector_agent)
+    workflow.add_node("docker_agent", docker_workflow_agent)  # New Docker agent for containerized execution
     workflow.add_node("finish_file", finish_file)
 
     # Start with agentic planner
@@ -63,5 +76,8 @@ def build_graph() -> StateGraph:
     workflow.add_edge("verifier", "critique")
     workflow.add_conditional_edges("critique", check_verification)
     workflow.add_edge("corrector", "verifier")
+    
+    # Docker agent routing
+    workflow.add_conditional_edges("docker_agent", route_from_docker)
     
     return workflow.compile()

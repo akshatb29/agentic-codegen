@@ -7,17 +7,15 @@ from rich.prompt import Prompt, Confirm
 
 from msc.state import AgentState
 from msc.tools import FilesystemTool, FileSelector
-from msc.tools.agentic_docker import docker_manager
+# Use new Docker architecture directly
+from msc.tools.docker_tools import docker_executor
 from msc.graph import build_graph
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Setup signal handler for graceful Docker cleanup
-docker_manager.setup_signal_handler()
-
 # Register cleanup function to run on exit
-atexit.register(docker_manager.cleanup_session_images)
+atexit.register(docker_executor.cleanup_session)
 
 def select_file_context(user_request: str = "") -> dict:
     """
@@ -71,6 +69,7 @@ def run_conversation_loop():
                 "enable_got_planning": enable_got,
                 "execution_mode": execution_mode,
                 "existing_file_context": selected_context,
+                "use_docker_execution": execution_mode == "docker",  # Enable Docker workflow agent
                 # --- Reset other state variables for the new task ---
                 "enable_symbolic_reasoning": False,
                 "enable_pseudocode_iterations": True,
@@ -92,14 +91,14 @@ def run_conversation_loop():
 
         except KeyboardInterrupt:
             print("\n👋 Session interrupted by user. Goodbye!")
-            docker_manager.cleanup_session_images()  # Clean up on interrupt
+            docker_executor.cleanup_session()  # Clean up on interrupt
             break
         except Exception as e:
             print(f"❌ An unexpected error occurred: {e}")
             print("🔄 Restarting loop...")
 
     # Clean up at end of normal session
-    docker_manager.cleanup_session_images()
+    docker_executor.cleanup_session()
 
 if __name__ == "__main__":
     run_conversation_loop()
