@@ -70,28 +70,11 @@ def _analyze_tech_stack_and_architecture(llm, state: AgentState) -> Dict[str, An
         }
 
 def _prepare_docker_environment_async(state: AgentState, app_type: str):
-    """Prepare Docker environment in background while planning continues"""
-    try:
-        # Import Docker components directly - new architecture
-        from msc.agents.docker_agent import docker_agent
-        from msc.tools.docker_tools import docker_executor
-        
-        print(f"🐳 [Background] Preparing Docker environment for {app_type} application...")
-        
-        # Create a preliminary spec for async building
-        sample_code = f"# Sample {app_type} application\nprint('Hello World')"
-        spec = docker_agent.analyze_code_and_generate_spec(sample_code, state["user_request"])
-        
-        # Start async build using the new tools
-        image_name = f"msc-session-{docker_executor.session_id}"
-        docker_executor.build_image_async(spec.dockerfile_content, image_name)
-        
-        # Store spec for later use
-        state["prepared_docker_spec"] = spec.model_dump() if hasattr(spec, 'model_dump') else spec.__dict__
-        
-    except Exception as e:
-        print(f"⚠️ Background Docker preparation failed: {e}")
-        state["prepared_docker_spec"] = None
+    """Docker environment prep - handled automatically by execution.py now"""
+    # With new simplified architecture, Docker setup is handled automatically
+    # by execution.py when code execution is needed - no async prep required
+    print(f"🐳 [Background] Docker environment will be prepared automatically for {app_type} application")
+    pass
 
 def _create_project_structure_plan(llm, state: AgentState) -> Dict[str, Any]:
     """Create comprehensive project structure including directories and requirements"""
@@ -183,16 +166,72 @@ def _run_graph_of_thoughts(llm, state: AgentState) -> SoftwareDesign:
             evaluated.best_design_index < 0 or 
             evaluated.best_design_index >= len(brainstormed.designs)):
             print("  ⚠️  Warning: Invalid evaluation, using first design")
-            return brainstormed.designs[0]
+            selected_design = brainstormed.designs[0]
+        else:
+            selected_design = brainstormed.designs[evaluated.best_design_index]
         
-        print(f"  3. Synthesizing the best design (Option #{evaluated.best_design_index})...")
-        # 3. Synthesis: Return the best design
-        return brainstormed.designs[evaluated.best_design_index]
+        print(f"  3. Synthesizing the best design...")
+        
+        # 4. Enhance with intelligent requirements prediction
+        print("  4. Predicting requirements and dependencies...")
+        enhanced_design = _enhance_design_with_requirements(selected_design, state)
+        
+        return enhanced_design
         
     except Exception as e:
         print(f"  ❌ Error in GoT process: {e}")
         print("  ⚠️  Falling back to direct design generation...")
         return _fallback_direct_design(llm, state)
+
+def _enhance_design_with_requirements(design: SoftwareDesign, state: AgentState) -> SoftwareDesign:
+    """Enhance design with intelligent requirements prediction"""
+    from msc.agents.requirements_installer import smart_requirements_predictor
+    
+    user_request = state.get("user_request", "")
+    
+    # Predict requirements based on user request
+    predicted_requirements = smart_requirements_predictor(user_request, "python")
+    
+    # Detect language from files
+    language = "python"  # default
+    for file_info in design.files:
+        filename = file_info.get("name", "")
+        if filename.endswith(".js") or filename.endswith(".ts"):
+            language = "javascript"
+            break
+        elif filename.endswith(".go"):
+            language = "go"
+            break
+    
+    # Detect framework from user request and files
+    framework = ""
+    request_lower = user_request.lower()
+    if "flask" in request_lower:
+        framework = "flask"
+        if "flask" not in predicted_requirements:
+            predicted_requirements.append("flask")
+    elif "django" in request_lower:
+        framework = "django"
+        if "django" not in predicted_requirements:
+            predicted_requirements.append("django")
+    elif "fastapi" in request_lower:
+        framework = "fastapi"
+        if "fastapi" not in predicted_requirements:
+            predicted_requirements.extend(["fastapi", "uvicorn"])
+    
+    # Create enhanced design
+    enhanced_design = SoftwareDesign(
+        thought=design.thought + f" Enhanced with predicted requirements: {predicted_requirements}",
+        files=design.files,
+        requirements=predicted_requirements,
+        language=language,
+        framework=framework
+    )
+    
+    console.print(f"📦 Predicted requirements: {predicted_requirements}", style="blue")
+    console.print(f"🔍 Detected language: {language}, framework: {framework}", style="dim")
+    
+    return enhanced_design
 
 def _fallback_direct_design(llm, state: AgentState) -> SoftwareDesign:
     """Fallback method for direct design generation when GoT fails."""
@@ -204,9 +243,18 @@ def _fallback_direct_design(llm, state: AgentState) -> SoftwareDesign:
             "existing_file_context": json.dumps(state["existing_file_context"], indent=2),
             "thoughts_history": [], "got_instructions": "", "replan_instructions": ""
         })
-        return design
+        
+        # Enhance with requirements prediction
+        enhanced_design = _enhance_design_with_requirements(design, state)
+        return enhanced_design
+        
     except Exception as e:
         console.log(f"  [red]Error in fallback design: {e}[/red]")
+        
+        # Use smart requirements prediction even for ultimate fallback
+        from msc.agents.requirements_installer import smart_requirements_predictor
+        predicted_requirements = smart_requirements_predictor(state.get("user_request", ""), "python")
+        
         # Ultimate fallback - create a minimal valid design
         return SoftwareDesign(
             thought="Fallback design due to errors in planning process",
@@ -215,7 +263,10 @@ def _fallback_direct_design(llm, state: AgentState) -> SoftwareDesign:
                 "purpose": f"Main implementation for: {state['user_request'][:100]}...",
                 "dependencies": [],
                 "key_functions": ["main"]
-            }]
+            }],
+            requirements=predicted_requirements,
+            language="python",
+            framework=""
         )
 
 def planner_agent(state: AgentState) -> Dict[str, Any]:

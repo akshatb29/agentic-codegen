@@ -1,0 +1,22 @@
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Update and install only essential packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    unzip \
+    build-essential \
+    vim \
+    nano \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create projects directory inside container
+RUN mkdir -p /projects
+WORKDIR /projects
+
+# Default command is shell for flexibility
+CMD ["/bin/bash"]

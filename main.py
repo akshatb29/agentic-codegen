@@ -7,15 +7,15 @@ from rich.prompt import Prompt, Confirm
 
 from msc.state import AgentState
 from msc.tools import FilesystemTool, FileSelector
-# Use new Docker architecture directly
-from msc.tools.docker_tools import docker_executor
-from msc.graph import build_graph
+# Use new simple project-based Docker architecture
+from msc.tools.simple_project_docker import simple_docker_manager
+from msc.enhanced_planning_graph import get_enhanced_planning_graph
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Register cleanup function to run on exit
-atexit.register(docker_executor.cleanup_session)
+atexit.register(simple_docker_manager.cleanup)
 
 def select_file_context(user_request: str = "") -> dict:
     """
@@ -41,13 +41,32 @@ def run_conversation_loop():
     print("=" * 80)
     print("🚀 AGENTIC AI DEVELOPMENT ASSISTANT 🚀")
     print("=" * 80)
-    print("Type your request to build or modify code. Type 'exit' or 'quit' to end.")
+    print("Available modes:")
+    print("  • docker: 🧠 Project-based Docker execution with isolated environments [DEFAULT]")
+    print("  • local: Run code locally without containers")
+    print("\nType your request to build or modify code. Type 'exit' or 'quit' to end.")
     
     # --- One-time setup ---
     print("\n⚙️  Initial Configuration:")
     enable_got = input("Enable Graph-of-Thoughts for advanced planning? [Y/n]: ").strip().lower() not in ['n', 'no']
-    execution_mode = input("Choose execution mode (local/docker) [docker]: ").strip() or "docker"
-    app = build_graph()
+    
+    # Simplified execution mode selection - project-based docker or local
+    print("\nExecution modes:")
+    print("  • docker: Project-based Docker execution (creates project directories)")
+    print("  • local: Run code locally without containers")
+    mode_input = input("Choose execution mode [docker,l]: ").strip().lower()
+    execution_mode = "local" if mode_input == "l" else "docker"
+    
+    # Show selected mode
+    if execution_mode == "docker":
+        print("✅ Project-based Docker mode selected")
+        print("   • Each project gets isolated directory")
+        print("   • Automatic requirements.txt management")
+        print("   • Lightweight Ubuntu container execution")
+    else:
+        print("✅ Local mode selected: Direct local execution")
+    
+    app = get_enhanced_planning_graph()
     # ----------------------
 
     while True:
@@ -69,7 +88,7 @@ def run_conversation_loop():
                 "enable_got_planning": enable_got,
                 "execution_mode": execution_mode,
                 "existing_file_context": selected_context,
-                "use_docker_execution": execution_mode == "docker",  # Enable Docker workflow agent
+                "use_docker_execution": execution_mode == "docker",  # Enable Docker workflow with CMD modifier
                 # --- Reset other state variables for the new task ---
                 "enable_symbolic_reasoning": False,
                 "enable_pseudocode_iterations": True,
@@ -83,22 +102,31 @@ def run_conversation_loop():
             # ------------------------
 
             print("\n" + "🤖" * 20 + " STARTING NEW TASK " + "🤖" * 20)
+            
+            # Reset Docker manager state for new task to ensure user prompts
+            simple_docker_manager.reset_for_new_task()
+            
             for event in app.stream(initial_state, {"recursion_limit": 150}):
                 for node, output in event.items():
                     print(f"--- ✅ Finished Node: {node} ---")
             
             print("\n" + "✅" * 25 + " TASK COMPLETE " + "✅" * 25)
+            
+            # Ask user if they want to copy session files
+            from rich.prompt import Confirm
+            if simple_docker_manager.current_project and Confirm.ask("💾 Copy project files to local directory?", default=True):
+                simple_docker_manager.copy_session_files()
 
         except KeyboardInterrupt:
             print("\n👋 Session interrupted by user. Goodbye!")
-            docker_executor.cleanup_session()  # Clean up on interrupt
+            simple_docker_manager.cleanup()  # Cleanup on interrupt
             break
         except Exception as e:
             print(f"❌ An unexpected error occurred: {e}")
             print("🔄 Restarting loop...")
 
     # Clean up at end of normal session
-    docker_executor.cleanup_session()
+    simple_docker_manager.cleanup()  # Cleanup before exit
 
 if __name__ == "__main__":
     run_conversation_loop()

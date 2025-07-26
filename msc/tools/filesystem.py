@@ -79,6 +79,16 @@ class FilesystemTool:
             return False
 
     @staticmethod
+    def read_file(file_path: str) -> str:
+        """Read file content"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            console.log(f"❌ [FileSystem] Failed to read {file_path}: {e}")
+            return ""
+
+    @staticmethod
     def read_directory_contents(directory_path: str, include_extensions: List[str] = ['.py', '.json', '.txt', '.md']) -> Dict[str, str]:
         context = {}
         for root, _, files in os.walk(directory_path):

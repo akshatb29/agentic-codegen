@@ -60,6 +60,12 @@ class AgentState(TypedDict):
     corrected_code: Optional[str]
     correction_attempts: int
     
+    # Package management fields
+    package_analysis: Optional[Dict[str, Any]]
+    package_installation: Optional[Dict[str, Any]]
+    dependency_resolution: Optional[Dict[str, Any]]
+    dependency_resolution_attempted: Optional[bool]
+    
     # New testing phase fields
     files_completed: Optional[bool]
     ready_for_testing: Optional[bool]
@@ -67,10 +73,21 @@ class AgentState(TypedDict):
     individual_tests_failed: Optional[List[str]]
     full_app_test_result: Optional[Dict[str, Any]]
     container_name: Optional[str]
+    
+    # Unified Docker execution fields
+    master_container_built: Optional[bool]
+    master_container_name: Optional[str]
+    master_image_name: Optional[str]
+    batch_execution_results: Optional[Dict[str, Any]]
+    test_generation_results: Optional[Dict[str, Any]]
+    parallel_execution_active: Optional[bool]
 
 class SoftwareDesign(BaseModel):
     thought: str = Field(description="A brief thought process on how this design was chosen.")
     files: List[Dict[str, Any]] = Field(description="A list of files to be created, each with a name, purpose, etc.")
+    requirements: List[str] = Field(description="List of required packages/dependencies for this project", default=[])
+    language: str = Field(description="Primary programming language (python, javascript, etc.)", default="python")
+    framework: str = Field(description="Main framework or technology stack", default="")
 
 class GenerationStrategy(BaseModel):
     thought: str = Field(description="Reasoning for the chosen strategy.")

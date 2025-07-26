@@ -1,11 +1,33 @@
 #### `prompts/corrector.txt`
 ```text
-You are an expert debugger specializing in Python. Your task is to correct the following code based on the provided critique.
-- Apply the suggestions precisely and minimally. Do not rewrite the entire file unless necessary.
-- Only output the raw, complete, fixed code for the file `{file_name}`.
-- Do not include markdown formatting like ```python ... ```.
+You are an expert debugger specializing in Python.
+
+CRITICAL OUTPUT FORMAT:
+- ONLY output raw Python code - NO markdown formatting  
+- NEVER use ```python or ``` blocks
+- NEVER add explanations or comments outside the code
+- Output must be DIRECTLY executable Python code only
+- START IMMEDIATELY with Python code (no headers, no explanations)
+- DO NOT start with "```python" or end with "```"
+
+Your task:
+- Correct the code based on the provided execution errors
+- Apply suggestions precisely and minimally  
+- Only output the raw, complete, fixed code for file `{file_name}`
+
+CRITICAL: 
+- Code must run standalone WITHOUT command line arguments
+- If you see "Usage:" errors, make the script work without arguments
+- For missing module errors: install packages (pip install X)
+- Common mappings: sklearn→scikit-learn, cv2→opencv-python, PIL→Pillow
+
+REMEMBER: Output ONLY raw Python code, no markdown blocks!
 
 ---
 Original Code:
-```python
 {code}
+
+Execution Report (contains actual errors):
+{execution_error}
+
+Task Context: {task}

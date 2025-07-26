@@ -30,18 +30,9 @@ providers:
       temperature: 0.1
 
   ollama:
-    class: "langchain_community.llms.Ollama"
-    base_url: "http://localhost:11434"  # Default Ollama URL
+    class: "langchain_google_genai.ChatGoogleGenerativeAI"  # Fallback to Gemini instead of Ollama
     models:
-      - "llama3.2:latest"
-      - "llama3.1:latest" 
-      - "llama3:latest"
-      - "codellama:latest"
-      - "mistral:latest"
-      - "phi3:latest"
-      - "qwen2.5:latest"
-      - "deepseek-coder:latest"
-      - "starcoder2:latest"
+      - "gemini-1.5-flash-latest"
     default_params:
       temperature: 0.1
 
@@ -52,6 +43,12 @@ agents:
     model: "gemini-1.5-flash-latest"
     temperature: 0.1
     description: "Strategic planning and architecture design"
+    
+  agentic_planner:
+    provider: "google"
+    model: "gemini-1.5-flash-latest"
+    temperature: 0.1
+    description: "Autonomous multi-agent planning with Graph-of-Thoughts"
     
   code_generator:
     provider: "google"
@@ -88,6 +85,18 @@ agents:
     model: "gemini-1.5-flash-latest"
     temperature: 0.3
     description: "Docker image analysis and specification generation"
+
+  cmd_modifier:
+    provider: "google"
+    model: "gemini-1.5-flash-latest"
+    temperature: 0.1
+    description: "AI-powered Docker CMD modification and optimization"
+
+  dynamic_problem_solver:
+    provider: "google"
+    model: "gemini-1.5-flash-latest"
+    temperature: 0.2
+    description: "Dynamic analysis and solution generation for any error type"
 
 # Global defaults
 defaults:

@@ -4,8 +4,31 @@ from msc.state import AgentState
 from msc.agents import (
     planner_agent, agentic_planner_agent, symbolic_reasoner_agent, pseudocode_refiner_agent,
     nl_to_code_agent, pseudocode_to_code_agent, symbolic_to_code_agent,
-    verifier_agent, critique_agent, corrector_agent, docker_workflow_agent
+    verifier_agent, critique_agent, corrector_agent
 )
+from msc.tools.execution import run_code
+
+# Initialize Docker tools
+def docker_agent(state: AgentState) -> AgentState:
+    """Execute generated code using Docker with automatic fallback"""
+    code = state.code
+    if not code:
+        return state
+    
+    filename = state.filename or "script.py"
+    user_request = getattr(state, 'user_request', '')
+    project_name = getattr(state, 'project_name', '')
+    language = getattr(state, 'language', '')
+    
+    # Use run_code with Docker-first, local fallback
+    result = run_code(
+        code=code,
+        filename=filename, 
+        use_docker=True,
+        user_request=user_request,
+        project_name=project_name,
+        language=language
+    )
 
 def should_continue(state: AgentState) -> str:
     if not state.get("file_plan_iterator"):
@@ -19,13 +42,17 @@ def route_strategy(state: AgentState) -> str:
     return {"Symbolic": "symbolic_reasoner", "Pseudocode": "pseudocode_refiner"}.get(strategy, "nl_to_code")
 
 def check_verification(state: AgentState) -> str:
-    if state["verifier_report"]["success"] and state["critique_feedback_details"]["is_correct_and_runnable"]:
-        # If Docker execution is enabled, route to docker_agent for containerized testing
-        if state.get("use_docker_execution", False):
-            return "docker_agent"
+    """Route based on execution success, not always through critique"""
+    verifier_report = state.get("verifier_report", {})
+    
+    # If execution was successful, we're done
+    if verifier_report.get("success", False):
         return "finish_file"
-    if state.get("correction_attempts", 0) >= 2:
-        return "finish_file"
+    
+    # If execution failed and we haven't tried too many times, correct it
+    if state.get("correction_attempts", 0) >= 3:
+        return "finish_file"  # Give up after 3 attempts
+    
     return "corrector"
 
 def route_from_docker(state: AgentState) -> str:
@@ -56,7 +83,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("verifier", verifier_agent)
     workflow.add_node("critique", critique_agent)
     workflow.add_node("corrector", corrector_agent)
-    workflow.add_node("docker_agent", docker_workflow_agent)  # New Docker agent for containerized execution
+    workflow.add_node("docker_agent", docker_agent)  # New Docker agent for containerized execution
     workflow.add_node("finish_file", finish_file)
 
     # Start with agentic planner
@@ -73,8 +100,8 @@ def build_graph() -> StateGraph:
     for node in ["nl_to_code", "pseudocode_to_code", "symbolic_to_code"]:
         workflow.add_edge(node, "verifier")
         
-    workflow.add_edge("verifier", "critique")
-    workflow.add_conditional_edges("critique", check_verification)
+    # Direct error-driven flow: verifier → corrector (if error) or finish (if success)
+    workflow.add_conditional_edges("verifier", check_verification)
     workflow.add_edge("corrector", "verifier")
     
     # Docker agent routing

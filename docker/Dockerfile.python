@@ -1,0 +1,15 @@
+# docker/Dockerfile.python
+FROM --platform=linux/amd64 python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+
+# Install bash and basic tools
+RUN apt-get update && apt-get install -y \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create projects directory inside container
+RUN mkdir -p /projects
+WORKDIR /projects
+
+CMD ["/bin/bash"]

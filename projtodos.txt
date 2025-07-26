@@ -12,3 +12,6 @@ Visual Diffing: When the CorrectorAgent generates a fix or a CodeGenAgent genera
 
 
 make singele llm config and use it everywhere
+
+
+also make the planner agent make a proper design ,archi ,flow analysis and then ask for user approval , also add a search tool that can enabled( if use chooses ) to search for best tech stack design archi best practicies etc  and ask the user conformation and if user auggests something dont just aggree make it so the planner agent can reason back as to why it made its decision and then give a choice to the user , play with the prompts folder 

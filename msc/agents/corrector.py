@@ -18,9 +18,9 @@ def corrector_agent(state: AgentState) -> Dict[str, Any]:
     code_to_correct = state.get("corrected_code") or state.get("generated_code")
     corrected_code = chain.invoke({
         "code": code_to_correct,
-        "critique": json.dumps(state.get("critique_feedback_details"), indent=2),
         "task": state["current_task_description"],
-        "file_name": state["current_file_name"]
+        "file_name": state["current_file_name"],
+        "execution_error": json.dumps(state.get("verifier_report"), indent=2)  # Focus on execution errors
     })
     
     return {

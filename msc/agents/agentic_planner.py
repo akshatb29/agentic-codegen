@@ -11,6 +11,7 @@ import uuid
 
 from msc.state import AgentState, SoftwareDesign, GenerationStrategy, BrainstormedDesigns, EvaluatedDesigns
 from msc.tools import user_confirmation_tool, FilesystemTool, load_prompt, get_llm
+from msc.agents.dynamic_problem_solver import solve_planning_error
 
 class AgentDecision(Enum):
     APPROVE = "approve"
@@ -198,14 +199,23 @@ class AgenticPlanner(AutonomousAgent):
         return subtasks
 
 def agentic_planner_agent(state: AgentState) -> Dict[str, Any]:
-    """Enhanced planner with agentic capabilities"""
+    """Enhanced planner with agentic capabilities and dynamic agent spawning"""
     planner = AgenticPlanner()
+    
+    # Check for infinite loop prevention
+    planning_attempts = state.get("planning_attempts", 0)
+    max_planning_attempts = 3
+    
+    if planning_attempts >= max_planning_attempts:
+        print(f"⚠️ Maximum planning attempts ({max_planning_attempts}) reached. Spawning specialized agent...")
+        return solve_planning_error(state)
     
     # PHASE 1: Autonomous Task Analysis
     if not state.get("plan_approved"):
         print("=" * 60)
         print("🤖 AGENTIC PLANNER: Autonomous Planning Phase")
         print("=" * 60)
+        print(f"📊 Planning attempt {planning_attempts + 1}/{max_planning_attempts}")
         
         # Agent decides on task complexity
         task_analysis = planner.decompose_task_autonomously(state["user_request"])
@@ -243,7 +253,8 @@ def agentic_planner_agent(state: AgentState) -> Dict[str, Any]:
                     "plan_approved": True, 
                     "file_plan_iterator": design.files.copy(),
                     "task_analysis": task_analysis,
-                    "agent_decision_log": decision_result
+                    "agent_decision_log": decision_result,
+                    "planning_attempts": 0  # Reset counter on success
                 }
             else:
                 # Learn from rejection
@@ -251,12 +262,17 @@ def agentic_planner_agent(state: AgentState) -> Dict[str, Any]:
                 return {
                     "plan_approved": False, 
                     "user_feedback_for_replan": user_command,
-                    "agent_decision_log": decision_result
+                    "agent_decision_log": decision_result,
+                    "planning_attempts": planning_attempts + 1
                 }
                 
         except Exception as e:
             print(f"❌ Error in agentic planning: {e}")
-            return {"plan_approved": False, "user_feedback_for_replan": f"Planning error: {str(e)}"}
+            return {
+                "plan_approved": False, 
+                "user_feedback_for_replan": f"Planning error: {str(e)}",
+                "planning_attempts": planning_attempts + 1
+            }
 
     # PHASE 2: Autonomous Strategy Selection
     print("=" * 60)
