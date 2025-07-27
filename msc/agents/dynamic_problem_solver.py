@@ -312,34 +312,19 @@ For this OpenCV libGL.so.1 error, you should suggest system packages like libgl1
                 return result
                 
             except json.JSONDecodeError as e:
-                print(f"⚠️ JSON decode error: {e}")
-                print(f"⚠️ Content that failed: {content[:200]}")
-                return self._fallback_analysis(error_context, state)
+                print(f"❌ JSON decode error: {e}")
+                print(f"❌ Content that failed: {content[:200]}")
+                return {
+                    "error": f"Failed to parse LLM response: {e}",
+                    "problem_type": "parsing_failed"
+                }
                 
         except Exception as e:
-            print(f"⚠️ LLM analysis failed: {e}")
-            return self._fallback_analysis(error_context, state)
-    
-    def _fallback_analysis(self, error_context: str, state: AgentState) -> Dict[str, Any]:
-        """Fallback analysis when LLM fails"""
-        system_deps = self.detect_system_dependencies(error_context)
-        missing_packages = self.extract_missing_from_error(error_context)
-        
-        # Generate commands for system dependencies
-        commands = []
-        if system_deps:
-            commands.append(f"apt-get update")
-            commands.append(f"apt-get install -y {' '.join(system_deps)}")
-        
-        return {
-            "problem_type": "fallback",
-            "analysis": "LLM analysis failed, using rule-based fallback",
-            "suggested_packages": missing_packages,
-            "system_packages": system_deps,
-            "commands_to_run": commands,
-            "confidence": 0.3,
-            "solution_strategy": "Basic pattern matching"
-        }
+            print(f"❌ LLM analysis failed: {e}")
+            return {
+                "error": f"Problem analysis failed: {e}",
+                "problem_type": "analysis_failed"
+            }
     
     def execute_fixes_with_confirmation(self, analysis_result: Dict[str, Any], container=None) -> Dict[str, Any]:
         """Execute suggested fixes with user confirmation"""

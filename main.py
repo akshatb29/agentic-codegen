@@ -7,9 +7,9 @@ from rich.prompt import Prompt, Confirm
 
 from msc.state import AgentState
 from msc.tools import FilesystemTool, FileSelector
-# Use new simple project-based Docker architecture
+# Use new unified enhanced graph with best of all systems
 from msc.tools.simple_project_docker import simple_docker_manager
-from msc.enhanced_planning_graph import get_enhanced_planning_graph
+from msc.unified_enhanced_graph import unified_enhanced_graph
 
 # Load environment variables from .env file
 load_dotenv()
@@ -66,7 +66,7 @@ def run_conversation_loop():
     else:
         print("✅ Local mode selected: Direct local execution")
     
-    app = get_enhanced_planning_graph()
+    app = unified_enhanced_graph
     # ----------------------
 
     while True:

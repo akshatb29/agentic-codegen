@@ -31,14 +31,18 @@ def verifier_agent(state: AgentState) -> Dict[str, Any]:
             console.print("� [VERIFIER] Using auto-fixed code", style="blue")
             code_to_verify = quality_report["clean_code"]
     
+    # Check execution mode - convert to boolean
+    use_docker_execution = state.get("execution_mode", "docker") == "docker"
+    
     report = run_code(
         code_to_verify, 
         state["file_path"], 
-        state["execution_mode"],
-        state.get("user_request", ""),  # Pass user request for better Docker image selection
-        project_name="",  # Let it auto-detect
-        language="",      # Let it auto-detect
-        ask_reuse=False   # Don't ask again - already chosen at start
+        use_docker=use_docker_execution,  # Convert to boolean
+        user_request=state.get("user_request", ""),  # Pass user request for better Docker image selection
+        project_name=state.get("project_name", ""),  # Let it auto-detect
+        language=state.get("language", ""),      # Let it auto-detect
+        ask_reuse=False,   # Don't ask again - already chosen at start
+        state=dict(state)  # Pass the full state to execution
     )
     
     # Add quality info to report

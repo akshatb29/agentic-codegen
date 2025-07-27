@@ -5,10 +5,11 @@ Enhanced Graph with Unified Docker Management and Parallel Test Generation
 from langgraph.graph import StateGraph, END
 from msc.state import AgentState
 from msc.agents import (
-    planner_agent, agentic_planner_agent, symbolic_reasoner_agent, pseudocode_refiner_agent,
+    planner_agent, symbolic_reasoner_agent, pseudocode_refiner_agent,
     nl_to_code_agent, pseudocode_to_code_agent, symbolic_to_code_agent,
     verifier_agent, critique_agent, corrector_agent
 )
+from msc.agents.requirements_installer import requirements_installer_agent
 from msc.tools.execution import run_code
 
 # Initialize execution functions
@@ -45,12 +46,12 @@ def should_continue(state: AgentState) -> str:
         if state.get("parallel_execution_active"):
             return "batch_test_generator"
         return END
-    return "agentic_planner"
+    return "planner"  # Use main planner instead of agentic_planner
 
 def route_strategy(state: AgentState) -> str:
     """Route to appropriate code generation strategy"""
     if not state.get("gen_strategy_approved"):
-        return "agentic_planner"  # Route back to agentic planner
+        return "planner"  # Route back to main planner
     strategy = state.get("chosen_gen_strategy")
     return {"Symbolic": "symbolic_reasoner", "Pseudocode": "pseudocode_refiner"}.get(strategy, "nl_to_code")
 
@@ -131,12 +132,12 @@ def batch_test_generator(state: AgentState) -> dict:
     }
 
 def build_enhanced_graph() -> StateGraph:
-    """Build enhanced graph with unified Docker management"""
+    """Build enhanced graph with main planner and requirements installer"""
     workflow = StateGraph(AgentState)
     
-    # Core agents
-    workflow.add_node("agentic_planner", agentic_planner_agent)
-    workflow.add_node("planner", planner_agent)  # Keep as fallback
+    # Core agents - removed agentic_planner, using main planner only
+    workflow.add_node("planner", planner_agent)  # Main planner with enhanced capabilities
+    workflow.add_node("requirements_installer", requirements_installer_agent)  # Add requirements installer
     workflow.add_node("symbolic_reasoner", symbolic_reasoner_agent)
     workflow.add_node("pseudocode_refiner", pseudocode_refiner_agent)
     workflow.add_node("nl_to_code", nl_to_code_agent)
@@ -153,17 +154,19 @@ def build_enhanced_graph() -> StateGraph:
     workflow.add_node("finish_file", finish_file)
     workflow.add_node("batch_test_generator", batch_test_generator)
 
-    # Entry point
-    workflow.set_entry_point("agentic_planner")
+    # Entry point - start with main planner
+    workflow.set_entry_point("planner")
     
-    # Planning phase routing
-    workflow.add_conditional_edges(
-        "agentic_planner", 
-        lambda s: "agentic_planner" if not s.get("plan_approved") else route_strategy(s)
-    )
+    # Planning phase routing - add requirements installation after planning
     workflow.add_conditional_edges(
         "planner", 
-        lambda s: "planner" if not s.get("plan_approved") else route_strategy(s)
+        lambda s: "requirements_installer" if s.get("plan_approved") and s.get("requirements") else route_strategy(s)
+    )
+    
+    # Route from requirements installer to strategy selection
+    workflow.add_conditional_edges(
+        "requirements_installer",
+        lambda s: route_strategy(s)
     )
     
     # Strategy execution
@@ -184,8 +187,6 @@ def build_enhanced_graph() -> StateGraph:
     
     # Docker execution routing
     workflow.add_conditional_edges("run_code_agent", route_docker_execution)
-    workflow.add_conditional_edges("unified_docker_workflow", route_docker_execution)
-    workflow.add_conditional_edges("batch_execution", route_batch_execution)
     
     # File completion and continuation
     workflow.add_conditional_edges("finish_file", should_continue)

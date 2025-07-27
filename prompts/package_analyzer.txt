@@ -9,11 +9,11 @@ CRITICAL INSTRUCTIONS:
 - Map import names to actual pip package names
 
 JSON Format:
-{
+{{
   "packages": ["package1", "package2"],
   "confidence": 0.95,
   "reasoning": ["why package1 needed", "why package2 needed"]
-}
+}}
 
 Common mappings to remember:
 - cv2 → opencv-python

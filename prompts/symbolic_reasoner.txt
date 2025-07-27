@@ -1,0 +1,47 @@
+You are an expert symbolic reasoner for complex programming tasks.
+
+TASK: Create a comprehensive symbolic representation for this programming task.
+
+## Analysis Framework:
+1. **Problem Decomposition**: Break down into logical components
+2. **Data Structures**: Identify key data structures needed
+3. **Algorithms**: Specify algorithmic patterns required
+4. **Constraints**: Define preconditions, postconditions, invariants
+5. **Edge Cases**: List critical edge cases to handle
+
+## For Complex Algorithms (ML, Graphics, Math):
+- Mathematical foundations and formulas
+- Algorithmic complexity analysis
+- Key optimization opportunities
+- Common pitfalls and their solutions
+
+## Output Format:
+```json
+{{
+  "problem_analysis": {{
+    "core_challenge": "main problem to solve",
+    "subproblems": ["list", "of", "subproblems"],
+    "complexity": "time/space complexity estimate"
+  }},
+  "algorithmic_structure": {{
+    "pattern": "algorithmic pattern (e.g., divide-conquer, dynamic-programming)",
+    "key_operations": ["operation1", "operation2"],
+    "data_flow": "how data moves through the system"
+  }},
+  "symbolic_representation": {{
+    "preconditions": ["what must be true before"],
+    "postconditions": ["what will be true after"],
+    "invariants": ["what stays true throughout"],
+    "edge_cases": ["critical edge cases"]
+  }},
+  "implementation_guidance": {{
+    "key_functions": ["function1", "function2"],
+    "critical_sections": ["areas needing careful implementation"],
+    "testing_strategy": ["how to verify correctness"]
+  }}
+}}
+```
+
+Task: {task}
+
+Provide a thorough symbolic analysis that will guide robust implementation:

@@ -13,6 +13,11 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
     """Install requirements predicted by the planner"""
     console.rule("[bold green]REQUIREMENTS INSTALLER: Installing Planned Dependencies[/bold green]")
     
+    # Check if requirements already installed to avoid repetition
+    if state.get("requirements_installed_successfully"):
+        console.print("✅ Requirements already installed, skipping repetitive installation", style="green")
+        return {"requirements_installation": {"success": True, "installed": [], "message": "Already installed"}}
+    
     # Get requirements from software design
     software_design = state.get("software_design", {})
     if isinstance(software_design, dict):
@@ -31,6 +36,42 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
     
     console.print(f"📋 Planner predicted requirements: {requirements}", style="blue")
     console.print(f"🔍 Language: {language}, Framework: {framework}", style="dim")
+    
+    # For local execution mode, install packages locally  
+    if state.get("execution_mode") == "local":
+        console.print("💻 Local execution mode - installing packages locally", style="yellow")
+        
+        # Actually install packages using pip
+        import subprocess
+        import sys
+        
+        installed = []
+        failed = []
+        
+        for req in requirements:
+            try:
+                console.print(f"📦 Installing {req}...", style="cyan")
+                result = subprocess.run([sys.executable, '-m', 'pip', 'install', req], 
+                                      capture_output=True, text=True, check=True)
+                installed.append(req)
+                console.print(f"✅ Successfully installed {req}", style="green")
+            except subprocess.CalledProcessError as e:
+                failed.append(req)
+                console.print(f"❌ Failed to install {req}: {e.stderr}", style="red")
+            except Exception as e:
+                failed.append(req)
+                console.print(f"❌ Error installing {req}: {e}", style="red")
+        
+        success = len(failed) == 0
+        return {
+            "requirements_installation": {
+                "success": success, 
+                "installed": installed, 
+                "failed": failed,
+                "message": f"Installed {len(installed)}/{len(requirements)} packages"
+            },
+            "requirements_installed_successfully": success
+        }
     
     # Ensure we have a Docker project setup
     if not simple_docker_manager.current_project:
@@ -65,26 +106,60 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
         try:
             container = client.containers.get(container_name)
             if container.status != 'running':
+                console.print("🔄 Starting existing container...", style="yellow")
                 container.start()
         except docker.errors.NotFound:
-            console.print("⚠️ Container not found, will be created during execution", style="yellow")
-            return {"requirements_installation": {"success": True, "installed": [], "message": "Container not ready"}}
+            console.print("🏗️ Container not found, creating new one...", style="yellow")
+            
+            # Create the container using the docker manager's image creation logic
+            image_name = f"msc-{language}"
+            
+            # Ensure image exists first
+            if not simple_docker_manager._ensure_image(language, image_name):
+                console.print("❌ Failed to create Docker image", style="red")
+                return {"requirements_installation": {"success": False, "error": "Image creation failed"}}
+            
+            # Create container
+            try:
+                container = client.containers.run(
+                    image_name,
+                    command="sleep infinity",
+                    name=container_name,
+                    working_dir="/projects",
+                    detach=True,
+                    remove=False
+                )
+                console.print("✅ Container created successfully", style="green")
+                
+                # Wait a moment for container to be fully ready
+                import time
+                time.sleep(2)
+            except Exception as e:
+                console.print(f"❌ Container creation failed: {e}", style="red")
+                return {"requirements_installation": {"success": False, "error": f"Container creation failed: {e}"}}
         
-        # Install each package
+        if not container:
+            console.print("❌ No container available", style="red")
+            return {"requirements_installation": {"success": False, "error": "No container available"}}
+        
+        # Install each package with enhanced error handling and reasoning
         for package in requirements:
             console.print(f"📦 Installing: {package}", style="blue")
             
             if language == "python":
-                # Apply package name mappings
+                # Apply package name mappings with reasoning
                 package_map = {
-                    'tensorflow': 'tensorflow-cpu',  # CPU version for faster install
-                    'torch': 'torch torchvision torchaudio',
-                    'cv2': 'opencv-python',
-                    'PIL': 'Pillow',
-                    'sklearn': 'scikit-learn',
-                    'skimage': 'scikit-image'
+                    'tensorflow': 'tensorflow-cpu',  # CPU version for faster install and broader compatibility
+                    'torch': 'torch torchvision torchaudio',  # Common PyTorch bundle
+                    'cv2': 'opencv-python',  # Standard OpenCV Python package
+                    'PIL': 'Pillow',  # Modern PIL replacement
+                    'sklearn': 'scikit-learn',  # Full package name
+                    'skimage': 'scikit-image'  # Full package name
                 }
                 actual_package = package_map.get(package, package)
+                
+                if actual_package != package:
+                    console.print(f"🔄 Mapping {package} → {actual_package}", style="dim")
                 
                 install_cmd = f"pip install {actual_package}"
                 result = container.exec_run(["bash", "-c", install_cmd])
@@ -97,6 +172,14 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
                     error_output = result.output.decode() if result.output else "Unknown error"
                     console.print(f"❌ Failed to install {package}: {error_output[:200]}", style="red")
                     
+                    # Enhanced error reasoning
+                    if "No module named" in error_output or "Could not find" in error_output:
+                        console.print(f"💡 Reasoning: Package '{package}' may not exist or name is incorrect", style="yellow")
+                    elif "Permission denied" in error_output:
+                        console.print(f"💡 Reasoning: Permission issue, container may need privileged access", style="yellow")
+                    elif "Connection" in error_output or "timeout" in error_output:
+                        console.print(f"💡 Reasoning: Network connectivity issue", style="yellow")
+                    
             elif language == "nodejs":
                 result = container.exec_run(["npm", "install", package])
                 if result.exit_code == 0:
@@ -104,15 +187,23 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
                     console.print(f"✅ Installed: {package}", style="green")
                 else:
                     failed_packages.append(package)
-                    console.print(f"❌ Failed to install {package}", style="red")
+                    error_output = result.output.decode() if result.output else "Unknown error"
+                    console.print(f"❌ Failed to install {package}: {error_output[:200]}", style="red")
         
-        # Create requirements.txt for future reference
+        # Create requirements file for future reference
         if language == "python" and installed_packages:
             requirements_content = "\n".join(installed_packages)
             container.exec_run(["bash", "-c", f"echo '{requirements_content}' > /projects/requirements.txt"])
             console.print("📄 Created requirements.txt", style="dim")
         
         success = len(failed_packages) == 0
+        
+        # Enhanced reporting with reasoning
+        if failed_packages:
+            console.print(f"⚠️ Installation summary: {len(installed_packages)} succeeded, {len(failed_packages)} failed", style="yellow")
+            console.print(f"💭 Failed packages may be retried during code execution", style="dim")
+        else:
+            console.print(f"🎉 All {len(installed_packages)} packages installed successfully!", style="green")
         
         return {
             "requirements_installation": {
@@ -121,7 +212,8 @@ def requirements_installer_agent(state: AgentState) -> Dict[str, Any]:
                 "failed": failed_packages,
                 "total": len(requirements),
                 "message": f"Installed {len(installed_packages)}/{len(requirements)} packages"
-            }
+            },
+            "requirements_installed_successfully": success  # Flag to prevent repetition
         }
         
     except Exception as e:

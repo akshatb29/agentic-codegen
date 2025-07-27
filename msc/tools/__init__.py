@@ -11,3 +11,4 @@ from .user_interaction import user_confirmation_tool, user_feedback_tool
 from .context_analyzer import ContextAnalyzer
 from .file_selector import FileSelector
 from .llm_manager import llm_manager, get_llm, get_agent_config
+from .web_search import search_tech_stack_recommendations, search_architecture_patterns

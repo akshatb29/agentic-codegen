@@ -7,6 +7,7 @@ import os
 import docker
 import time
 import re
+import ast
 from typing import Dict, Any, List
 from pathlib import Path
 from .filesystem import FilesystemTool
@@ -351,12 +352,27 @@ class SimpleProjectDocker:
         return None  # Indicate that auto-fix didn't work
     
     def _execute_in_container(self, container, code: str, filename: str, user_request: str = "") -> Dict[str, Any]:
-        """Execute code in a container and return result"""
+        """Execute code in a container with proper validation and safety checks"""
         project_path = f"/projects/{self.current_project}"
         
-        # Write code to container
+        # STEP 1: Validate and clean the code first
+        validated_code = self._validate_and_clean_code(code, filename)
+        if not validated_code["valid"]:
+            return {"success": False, "error": validated_code["error"], "stderr": validated_code["error"]}
+        
+        clean_code = validated_code["code"]
+        console.print(f"✅ Code validation passed", style="green")
+        
+        # STEP 2: Check for bulk requirements and install them all at once
+        requirements = self._extract_all_requirements(clean_code)
+        if requirements:
+            bulk_install_result = self._bulk_install_requirements(container, requirements)
+            if not bulk_install_result["success"]:
+                console.print(f"⚠️ Bulk install partially failed: {bulk_install_result['message']}", style="yellow")
+        
+        # STEP 3: Write validated code to container
         import base64
-        encoded_code = base64.b64encode(code.encode('utf-8')).decode('ascii')
+        encoded_code = base64.b64encode(clean_code.encode('utf-8')).decode('ascii')
         setup_cmd = f"mkdir -p {project_path} && echo '{encoded_code}' | base64 -d > {project_path}/{filename}"
         
         # Setup
@@ -365,8 +381,8 @@ class SimpleProjectDocker:
             error_msg = exec_result.output.decode() if exec_result.output else "No error output"
             return {"success": False, "error": "Setup failed", "stderr": error_msg}
         
-        # Execute
-        language_cmd = self._get_exec_command(filename, self.current_language)
+        # STEP 4: Execute with safe command
+        language_cmd = self._get_safe_exec_command(filename, self.current_language)
         exec_result = container.exec_run(language_cmd, workdir=project_path)
         
         stdout = exec_result.output.decode() if exec_result.output else ""
@@ -433,6 +449,257 @@ class SimpleProjectDocker:
             return ["ruby", filename]
         else:
             return ["python3", filename]
+    
+    def _get_safe_exec_command(self, filename: str, language: str) -> List[str]:
+        """Get safe execution command with timeout and resource limits"""
+        if language == "python":
+            return ["timeout", "30", "python3", filename]
+        elif language == "nodejs":
+            return ["timeout", "30", "node", filename]
+        elif language == "go":
+            return ["timeout", "30", "go", "run", filename]
+        elif language == "ruby":
+            return ["timeout", "30", "ruby", filename]
+        else:
+            return ["timeout", "30", "python3", filename]
+    
+    def _validate_and_clean_code(self, code: str, filename: str) -> Dict[str, Any]:
+        """Validate code format, remove fences, check for dangerous commands"""
+        try:
+            # STEP 1: Remove markdown code fences
+            clean_code = self._remove_code_fences(code)
+            
+            # STEP 2: Check for dangerous commands
+            dangerous_check = self._check_dangerous_commands(clean_code)
+            if not dangerous_check["safe"]:
+                return {"valid": False, "error": f"Dangerous command detected: {dangerous_check['reason']}", "code": ""}
+            
+            # STEP 3: Validate syntax for the language
+            syntax_check = self._validate_syntax(clean_code, filename)
+            if not syntax_check["valid"]:
+                return {"valid": False, "error": f"Syntax error: {syntax_check['error']}", "code": ""}
+            
+            # STEP 4: Check for proper imports and structure
+            structure_check = self._validate_code_structure(clean_code, filename)
+            if not structure_check["valid"]:
+                console.print(f"⚠️ Structure warning: {structure_check['warning']}", style="yellow")
+            
+            return {"valid": True, "code": clean_code, "warnings": structure_check.get("warnings", [])}
+            
+        except Exception as e:
+            return {"valid": False, "error": f"Validation failed: {str(e)}", "code": ""}
+    
+    def _remove_code_fences(self, code: str) -> str:
+        """Remove markdown code fences and clean formatting"""
+        import re
+        
+        # Remove code fences (```python, ```javascript, etc.)
+        code = re.sub(r'^```[a-zA-Z]*\n', '', code, flags=re.MULTILINE)
+        code = re.sub(r'\n```$', '', code, flags=re.MULTILINE)
+        code = re.sub(r'^```$', '', code, flags=re.MULTILINE)
+        
+        # Remove leading/trailing whitespace
+        code = code.strip()
+        
+        # Normalize line endings
+        code = code.replace('\r\n', '\n').replace('\r', '\n')
+        
+        return code
+    
+    def _check_dangerous_commands(self, code: str) -> Dict[str, Any]:
+        """Check for potentially dangerous commands"""
+        dangerous_patterns = [
+            r'rm\s+-rf',
+            r'sudo\s+',
+            r'chmod\s+777',
+            r'wget\s+.*\s*\|\s*bash',
+            r'curl\s+.*\s*\|\s*bash',
+            r'eval\s*\(',
+            r'exec\s*\(',
+            r'__import__\s*\(',
+            r'open\s*\(\s*["\']\/etc\/',
+            r'os\.system\s*\(',
+            r'subprocess\.',
+            r'import\s+subprocess',
+        ]
+        
+        for pattern in dangerous_patterns:
+            if re.search(pattern, code, re.IGNORECASE):
+                return {"safe": False, "reason": f"Matches dangerous pattern: {pattern}"}
+        
+        return {"safe": True}
+    
+    def _validate_syntax(self, code: str, filename: str) -> Dict[str, Any]:
+        """Basic syntax validation based on file extension"""
+        try:
+            if filename.endswith('.py'):
+                # Python syntax check
+                import ast
+                ast.parse(code)
+                return {"valid": True}
+            elif filename.endswith('.js'):
+                # Basic JavaScript validation (check for balanced braces/parentheses)
+                if self._check_balanced_delimiters(code):
+                    return {"valid": True}
+                else:
+                    return {"valid": False, "error": "Unbalanced braces or parentheses"}
+            else:
+                # For other languages, do basic checks
+                return {"valid": True}
+                
+        except SyntaxError as e:
+            return {"valid": False, "error": f"Python syntax error: {str(e)}"}
+        except Exception as e:
+            return {"valid": False, "error": f"Validation error: {str(e)}"}
+    
+    def _check_balanced_delimiters(self, code: str) -> bool:
+        """Check if braces, parentheses, and brackets are balanced"""
+        stack = []
+        pairs = {'(': ')', '[': ']', '{': '}'}
+        
+        for char in code:
+            if char in pairs:
+                stack.append(char)
+            elif char in pairs.values():
+                if not stack:
+                    return False
+                if pairs[stack.pop()] != char:
+                    return False
+        
+        return len(stack) == 0
+    
+    def _validate_code_structure(self, code: str, filename: str) -> Dict[str, Any]:
+        """Validate code structure and provide warnings"""
+        warnings = []
+        
+        if filename.endswith('.py'):
+            # Check for common Python structure issues
+            if 'if __name__ == "__main__"' not in code and 'def ' in code:
+                warnings.append("Consider adding 'if __name__ == \"__main__\"' guard")
+            
+            if 'import' not in code and any(lib in code for lib in ['pandas', 'numpy', 'matplotlib']):
+                warnings.append("Missing import statements for detected libraries")
+        
+        return {"valid": True, "warnings": warnings}
+    
+    def _extract_all_requirements(self, code: str) -> List[str]:
+        """Extract ALL requirements from code for bulk installation"""
+        requirements = set()
+        
+        # Common import to package mappings
+        import_to_package = {
+            'numpy': 'numpy',
+            'np': 'numpy',
+            'pandas': 'pandas', 
+            'pd': 'pandas',
+            'matplotlib': 'matplotlib',
+            'plt': 'matplotlib',
+            'seaborn': 'seaborn',
+            'sns': 'seaborn',
+            'sklearn': 'scikit-learn',
+            'cv2': 'opencv-python',
+            'PIL': 'Pillow',
+            'tensorflow': 'tensorflow-cpu',
+            'tf': 'tensorflow-cpu',
+            'torch': 'torch',
+            'keras': 'keras',
+            'requests': 'requests',
+            'flask': 'flask',
+            'django': 'django',
+            'fastapi': 'fastapi',
+            'scipy': 'scipy',
+            'plotly': 'plotly',
+            'streamlit': 'streamlit',
+            'beautifulsoup4': 'beautifulsoup4',
+            'bs4': 'beautifulsoup4'
+        }
+        
+        # Extract imports
+        import re
+        
+        # Pattern 1: import library
+        for match in re.finditer(r'import\s+([a-zA-Z_][a-zA-Z0-9_]*)', code):
+            lib = match.group(1)
+            if lib in import_to_package:
+                requirements.add(import_to_package[lib])
+        
+        # Pattern 2: from library import
+        for match in re.finditer(r'from\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+import', code):
+            lib = match.group(1)
+            if lib in import_to_package:
+                requirements.add(import_to_package[lib])
+        
+        # Pattern 3: import alias (import numpy as np)
+        for match in re.finditer(r'import\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+([a-zA-Z_][a-zA-Z0-9_]*)', code):
+            lib = match.group(1)
+            alias = match.group(2)
+            if lib in import_to_package:
+                requirements.add(import_to_package[lib])
+            elif alias in import_to_package:
+                requirements.add(import_to_package[alias])
+        
+        return list(requirements)
+    
+    def _bulk_install_requirements(self, container, requirements: List[str]) -> Dict[str, Any]:
+        """Install all requirements at once for efficiency"""
+        if not requirements:
+            return {"success": True, "message": "No requirements to install"}
+        
+        console.print(f"📦 Installing {len(requirements)} packages in bulk: {', '.join(requirements)}", style="blue")
+        
+        try:
+            # Create a single pip install command
+            package_string = ' '.join(requirements)
+            install_cmd = f"pip install {package_string}"
+            
+            console.print(f"🔧 Running: {install_cmd}", style="dim")
+            result = container.exec_run(["bash", "-c", install_cmd], workdir="/")
+            
+            output = result.output.decode() if result.output else ""
+            
+            if result.exit_code == 0:
+                console.print(f"✅ Bulk install successful: {len(requirements)} packages", style="green")
+                return {"success": True, "message": f"Installed {len(requirements)} packages", "output": output}
+            else:
+                console.print(f"❌ Bulk install failed (exit {result.exit_code})", style="red")
+                console.print(f"Output: {output}", style="dim")
+                
+                # Try individual installation as fallback
+                return self._fallback_individual_install(container, requirements)
+                
+        except Exception as e:
+            console.print(f"❌ Bulk install exception: {e}", style="red")
+            return self._fallback_individual_install(container, requirements)
+    
+    def _fallback_individual_install(self, container, requirements: List[str]) -> Dict[str, Any]:
+        """Fallback to individual package installation"""
+        console.print("🔄 Falling back to individual package installation...", style="yellow")
+        
+        successful = []
+        failed = []
+        
+        for package in requirements:
+            try:
+                console.print(f"  📦 Installing {package}...", style="dim")
+                result = container.exec_run(["pip", "install", package], workdir="/")
+                
+                if result.exit_code == 0:
+                    successful.append(package)
+                    console.print(f"  ✅ {package}", style="green")
+                else:
+                    failed.append(package)
+                    console.print(f"  ❌ {package}", style="red")
+                    
+            except Exception as e:
+                failed.append(package)
+                console.print(f"  ❌ {package}: {e}", style="red")
+        
+        return {
+            "success": len(failed) == 0,
+            "message": f"Individual install: {len(successful)} success, {len(failed)} failed",
+            "successful": successful,
+            "failed": failed
+        }
 
     def _extract_missing_module(self, error_output: str) -> str:
         """Extract missing module name from error output"""
