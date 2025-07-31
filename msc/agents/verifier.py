@@ -8,7 +8,7 @@ console = Console()
 
 def verifier_agent(state: AgentState) -> Dict[str, Any]:
     print("=" * 60)
-    print("⚡ VERIFIER: Executing Code")
+    print("VERIFIER: Executing Code")
     print("=" * 60)
     
     # Import run_code locally to avoid circular import
@@ -23,12 +23,12 @@ def verifier_agent(state: AgentState) -> Dict[str, Any]:
     quality_report = code_checker.check_code(code_to_verify, state.get("file_path", "script.py"))
     
     if quality_report["has_issues"]:
-        console.print("🔍 [VERIFIER] Code quality issues detected:", style="yellow")
+        console.print("[VERIFIER] Code quality issues detected:", style="yellow")
         code_checker.report_issues()
         
         # Use auto-fixed code if available
         if quality_report["clean_code"] != code_to_verify:
-            console.print("� [VERIFIER] Using auto-fixed code", style="blue")
+            console.print(" [VERIFIER] Using auto-fixed code", style="blue")
             code_to_verify = quality_report["clean_code"]
     
     # Check execution mode - convert to boolean
