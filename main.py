@@ -9,7 +9,7 @@ from msc.state import AgentState
 from msc.tools import FilesystemTool, FileSelector
 from msc.tools.code_analyzer import CodeAnalyzer
 from msc.tools.simple_project_docker import simple_docker_manager
-# from msc.enhanced_planning_graph import get_enhanced_planning_graph
+from msc.enhanced_planning_graph import get_enhanced_planning_graph
 from msc.enhanced_graph import enhanced_graph;
 
 # Initialize Rich Console for better output
@@ -65,7 +65,7 @@ def run_conversation_loop():
     else:
         console.log("Local mode selected: Direct local execution")
 
-    app = enhanced_graph()
+    app = get_enhanced_planning_graph()
     # ----------------------
 
     while True:
